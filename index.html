@@ -31,10 +31,17 @@ canvas{display:block;width:100vw;height:100vh;}
 #death-flash.flash{opacity:0.8;}
 #start-screen,#game-over,#victory-screen{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200;background:rgba(26,16,37,0.95);color:#d8c8e3;transition:opacity 0.5s;}
 #game-over{background:rgba(10,5,15,0.95);color:#ff0044;font-size:24px;opacity:0;pointer-events:none;}
-#victory-screen{background:rgba(255,255,255,0.95);color:#a29bfe;font-size:28px;text-shadow:0 0 20px #fff;opacity:0;pointer-events:none;}
+#victory-screen{background:rgba(255,255,255,0.95);color:#a29bfe;font-size:28px;text-shadow:0 0 20px #fff;opacity:0;pointer-events:none; overflow: hidden;}
 #game-over.active,#victory-screen.active{opacity:1;pointer-events:auto;}
-.restart-btn{margin-top:30px;padding:12px 35px;background:transparent;border:2px solid currentColor;border-radius:20px;font-size:16px;font-weight:bold;cursor:pointer;color:inherit;font-family:'Courier New',monospace;}
+.restart-btn{margin-top:20px;padding:12px 35px;background:transparent;border:2px solid currentColor;border-radius:20px;font-size:16px;font-weight:bold;cursor:pointer;color:inherit;font-family:'Courier New',monospace; z-index: 205;}
 .restart-btn:active{background:currentColor;color:#111;}
+
+/* 撒花动画 */
+@keyframes fall {
+    0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+}
+.confetti { position: absolute; pointer-events: none; z-index: 201; }
 </style>
 </head>
 <body>
@@ -60,7 +67,6 @@ canvas{display:block;width:100vw;height:100vh;}
 <div class="build-menu">
 <div class="build-btn" id="btn-tv" onclick="build('tv')">📺<div class="build-cost">10碎</div></div>
 <div class="build-btn" id="btn-tent" onclick="build('tent')">⛺<div class="build-cost">25碎 15木</div></div>
-<!-- 斧头大降价！ -->
 <div class="build-btn" id="btn-axe" onclick="build('axe')">🪓<div class="build-cost">10碎 15木</div></div>
 <div class="build-btn" id="btn-net" onclick="build('net')">🕸️<div class="build-cost">30碎 20木</div></div>
 <div class="build-btn" id="btn-door" onclick="build('door')" style="border-color:#fff;box-shadow:0 0 15px #fff;">🚪<div class="build-cost">100碎 80木</div></div>
@@ -71,10 +77,20 @@ canvas{display:block;width:100vw;height:100vh;}
 
 <div id="pause-screen" onclick="togglePause()">已暂停 (点击继续)</div>
 <div id="death-flash"></div>
-<!-- 这里是秦始皇专属的 MP3 接口！记得同目录下要有 qin.mp3 -->
+
+<!-- 你的两个专属 MP3 接口 -->
 <audio id="qin-audio" src="qin.mp3" preload="auto"></audio>
+<audio id="win-audio" src="edm.mp3" preload="auto"></audio>
+
 <div id="game-over"><div>梦境崩塌。</div><div id="survival-record" style="font-size:14px;margin-top:10px;color:#666;"></div><button class="restart-btn" style="color:#6e8a9f" onclick="location.reload()">重新入梦</button></div>
-<div id="victory-screen"><div>你醒了。</div><button class="restart-btn" style="color:#a29bfe;margin-top:50px;" onclick="location.reload()">再次入睡</button></div>
+
+<!-- 华丽觉醒界面（图片+按钮） -->
+<div id="victory-screen">
+    <div style="z-index: 202;">你醒了。</div>
+    <!-- 这里是秦始皇骑北极熊的图片接口！记得放 qin_bear.jpg -->
+    <img src="qin_bear.jpg" alt="秦始皇骑北极熊" onerror="this.style.display='none'" style="z-index: 202; width: 250px; max-width: 80%; border-radius: 15px; margin: 25px 0; box-shadow: 0 0 40px rgba(162, 155, 254, 0.6); border: 2px solid #a29bfe;">
+    <button class="restart-btn" style="color:#a29bfe;" onclick="location.reload()">再次入睡</button>
+</div>
 
 <script>
 const state = { started: false, time: 0, paused: false, frags: 0, wood: 0, san: 100, dead: false, win: false, zones: [], nights: 0, isNight: false, nets: [], lastGen: 0, hasAxe: false, tentPos: null };
@@ -111,12 +127,11 @@ const audio = {
             audioEl.currentTime = 0; 
             audioEl.volume = 1.0;
             audioEl.play().catch(e=>console.log("音频需先点击屏幕互动才能播放")); 
-            // 【音频闪避机制】：秦始皇播放时，降低游戏 WebAudio 音量
             if(this.ctx && this.master) {
-                this.master.gain.setTargetAtTime(0.05, this.ctx.currentTime, 0.2); // 迅速压低到 5%
+                this.master.gain.setTargetAtTime(0.05, this.ctx.currentTime, 0.2); 
                 setTimeout(() => {
                     if(!state.dead && !state.win && !state.paused && this.ctx) {
-                        this.master.gain.setTargetAtTime(0.5, this.ctx.currentTime, 1.0); // 5秒后恢复正常
+                        this.master.gain.setTargetAtTime(0.5, this.ctx.currentTime, 1.0); 
                     }
                 }, 5000);
             }
@@ -136,7 +151,7 @@ const audio = {
         const g = this.ctx.createGain(); g.gain.value=2; n.connect(f).connect(g).connect(this.master); n.start();
     },
     updateDanger: function(d) { if(this.ctx&&!state.dead&&!state.win) this.dGain.gain.setTargetAtTime(d<8 ? (8-d)/8*0.2 : 0, this.ctx.currentTime, 0.5); },
-    stop: function() { if(this.master) this.master.gain.linearRampToValueAtTime(0,this.ctx.currentTime+1); }
+    stop: function() { if(this.master) this.master.gain.linearRampToValueAtTime(0,this.ctx.currentTime+0.5); }
 };
 
 const scene = new THREE.Scene(); const cDay=new THREE.Color('#c8bce5'), cNight=new THREE.Color('#1a1025');
@@ -214,13 +229,48 @@ function spawnExplosion(x, y, z) {
     }
 }
 
+// 撒花函数 🎊
+function throwConfetti() {
+    const vScreen = document.getElementById('victory-screen');
+    const colors = ['#a29bfe', '#fd79a8', '#ffeaa7', '#00cec9', '#ff7675', '#55efc4'];
+    for(let i=0; i<100; i++) {
+        const c = document.createElement('div');
+        c.className = 'confetti';
+        c.style.left = Math.random() * 100 + 'vw';
+        c.style.top = -10 - Math.random() * 20 + 'vh';
+        c.style.width = Math.random() * 12 + 6 + 'px';
+        c.style.height = Math.random() * 12 + 6 + 'px';
+        c.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        c.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
+        c.style.animationDuration = Math.random() * 3 + 2 + 's';
+        c.style.animationDelay = Math.random() * 1 + 's';
+        vScreen.appendChild(c);
+    }
+}
+
 window.build=function(t){
     if(state.dead||state.win||!state.started||state.paused) return; const px=pGrp.position.x, pz=pGrp.position.z;
     if(t==='axe'&&!state.hasAxe&&state.frags>=10&&state.wood>=15) { state.frags-=10; state.wood-=15; state.hasAxe=true; sM("🪓 伐木斧获得! 点击大树砍伐"); }
     else if(t==='tv'&&state.frags>=10) { state.frags-=10; const g=new THREE.Group(); const sh=new THREE.Mesh(new THREE.BoxGeometry(2.5,2,1.5),new THREE.MeshStandardMaterial({color:'#2d3436'})); sh.position.y=2.5; sh.castShadow=true; g.add(sh); const s=new THREE.Mesh(new THREE.PlaneGeometry(2,1.5),new THREE.MeshBasicMaterial({map:stT})); s.position.set(0,2.5,0.76); g.add(s); g.add(new THREE.PointLight('#00cec9',5,30)).position.set(0,2.5,1); const a=new THREE.Sprite(new THREE.SpriteMaterial({map:tvG,color:'#00cec9',transparent:true,opacity:0.6,blending:THREE.AdditiveBlending,depthWrite:false})); a.scale.set(15,15,1); a.position.y=2.5; g.add(a); g.position.set(px,0,pz); scene.add(g); state.zones.push({t:'tv',x:px,z:pz,r:6,a:a,bs:15}); sM("📺 临时结界"); }
     else if(t==='tent'&&state.frags>=25&&state.wood>=15) { state.frags-=25; state.wood-=15; const g=new THREE.Group(), geo=new THREE.ConeGeometry(3,5,4), m=new THREE.MeshStandardMaterial({color:'#fd79a8',emissive:'#fd79a8',emissiveIntensity:0.3,transparent:true,opacity:0.65,side:THREE.DoubleSide,depthWrite:false}); const te=new THREE.Mesh(geo,m); te.position.y=2.55; te.rotation.y=Math.PI/4; g.add(te); const lines=new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:'#3b2a5c',linewidth:2})); lines.position.y=2.55; lines.rotation.y=Math.PI/4; g.add(lines); g.add(new THREE.PointLight('#ff9ecd',4,25)).position.y=2; const a=new THREE.Sprite(new THREE.SpriteMaterial({map:teG,color:'#ff9ecd',transparent:true,opacity:0.6,blending:THREE.AdditiveBlending,depthWrite:false})); a.scale.set(18,18,1); a.position.y=2; g.add(a); g.position.set(px,0,pz); scene.add(g); state.zones.push({t:'tent',x:px,z:pz,r:9,a:a,bs:18}); state.tentPos={x:px,z:pz}; tentPointer.visible=true; sM("⛺ 庇护所建立"); }
     else if(t==='net'&&state.frags>=30&&state.wood>=20) { state.frags-=30; state.wood-=20; const g=new THREE.Group(), ri=new THREE.Mesh(new THREE.TorusGeometry(1.5,0.1,8,24),new THREE.MeshStandardMaterial({color:'#ffeaa7',emissive:'#ffb142',emissiveIntensity:0.6})); ri.position.y=3; ri.rotation.x=Math.PI/2; ri.castShadow=true; g.add(ri); const c=new THREE.Mesh(pGeo,pMat); c.position.y=3; c.castShadow=true; g.add(c); g.position.set(px,0,pz); scene.add(g); state.nets.push({g:g,r:ri,c:c}); sM("🕸️ 自动产出中"); }
-    else if(t==='door'&&state.frags>=100&&state.wood>=80) { state.frags-=100; state.wood-=80; const g=new THREE.Group(), f=new THREE.Mesh(new THREE.BoxGeometry(4,7,0.5),new THREE.MeshStandardMaterial({color:'#fff',emissive:'#fff'})); f.position.y=3.5; f.castShadow=true; g.add(f); g.add(new THREE.PointLight('#fff',8,50)).position.set(0,3.5,1); g.position.set(px,0,pz); g.lookAt(px,0,pz); scene.add(g); state.win=true; document.getElementById('ui-layer').style.opacity=0; setTimeout(()=>document.getElementById('victory-screen').classList.add('active'),1000); }
+    else if(t==='door'&&state.frags>=100&&state.wood>=80) { 
+        state.frags-=100; state.wood-=80; const g=new THREE.Group(), f=new THREE.Mesh(new THREE.BoxGeometry(4,7,0.5),new THREE.MeshStandardMaterial({color:'#fff',emissive:'#fff'})); f.position.y=3.5; f.castShadow=true; g.add(f); g.add(new THREE.PointLight('#fff',8,50)).position.set(0,3.5,1); g.position.set(px,0,pz); g.lookAt(px,0,pz); scene.add(g); 
+        state.win=true; document.getElementById('ui-layer').style.opacity=0; 
+        
+        // 【核心大门结算动画与电音触发】
+        setTimeout(()=>{
+            document.getElementById('victory-screen').classList.add('active');
+            audio.stop(); // 停止所有压抑的背景噪音
+            
+            // 播放极致电音
+            const winAudio = document.getElementById('win-audio');
+            if(winAudio) { winAudio.volume = 1.0; winAudio.play().catch(e=>console.log("音频需交互")); }
+            
+            // 触发全屏撒花
+            throwConfetti();
+        }, 1000); 
+    }
     else if(t==='axe'&&state.hasAxe) { sM("已经拥有伐木斧了!"); }
     else sM("资源不足..."); upUI();
 };
@@ -239,10 +289,9 @@ function showQuote(isManual = false) {
     const el = document.getElementById('monologue'); 
     let q = quotes[Math.floor(Math.random()*quotes.length)];
     
-    // 【纯本地极速版】
     if (isManual) {
         clickPokes++;
-        if (clickPokes === 2 || q.includes("秦始皇")) { q = "秦始皇骑北极熊......"; clickPokes = 0; }
+        if (clickPokes >= 2 || q.includes("秦始皇")) { q = "秦始皇骑北极熊......"; clickPokes = 0; }
     }
 
     el.innerText = q; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); 

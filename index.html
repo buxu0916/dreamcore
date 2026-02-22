@@ -58,9 +58,9 @@ canvas{display:block;width:100vw;height:100vh;}
 </div>
 </div>
 <div class="build-menu">
-<div class="build-btn" id="btn-axe" onclick="build('axe')">🪓<div class="build-cost">20碎 50木</div></div>
 <div class="build-btn" id="btn-tv" onclick="build('tv')">📺<div class="build-cost">10碎</div></div>
 <div class="build-btn" id="btn-tent" onclick="build('tent')">⛺<div class="build-cost">25碎 15木</div></div>
+<div class="build-btn" id="btn-axe" onclick="build('axe')">🪓<div class="build-cost">20碎 50木</div></div>
 <div class="build-btn" id="btn-net" onclick="build('net')">🕸️<div class="build-cost">30碎 20木</div></div>
 <div class="build-btn" id="btn-door" onclick="build('door')" style="border-color:#fff;box-shadow:0 0 15px #fff;">🚪<div class="build-cost">100碎 80木</div></div>
 </div>
@@ -70,11 +70,12 @@ canvas{display:block;width:100vw;height:100vh;}
 
 <div id="pause-screen" onclick="togglePause()">已暂停 (点击继续)</div>
 <div id="death-flash"></div>
+<audio id="qin-audio" src="qin.mp3" preload="auto"></audio>
 <div id="game-over"><div>梦境崩塌。</div><div id="survival-record" style="font-size:14px;margin-top:10px;color:#666;"></div><button class="restart-btn" style="color:#6e8a9f" onclick="location.reload()">重新入梦</button></div>
 <div id="victory-screen"><div>你醒了。</div><button class="restart-btn" style="color:#a29bfe;margin-top:50px;" onclick="location.reload()">再次入睡</button></div>
 
 <script>
-const state = { started: false, time: 0, paused: false, frags: 0, wood: 0, san: 100, dead: false, win: false, zones: [], nights: 0, isNight: false, nets: [], lastGen: 0, hasAxe: false };
+const state = { started: false, time: 0, paused: false, frags: 0, wood: 0, san: 100, dead: false, win: false, zones: [], nights: 0, isNight: false, nets: [], lastGen: 0, hasAxe: false, tentPos: null };
 const quotes = ["我也不知道你在说什么.....","奥特曼要去泰国变性......","不要回头......","大傻嗨.......","财神到财神到.....","明天还要上课上班......","时钟怎么不转了......","我好像尿尿了........","大牛比较懒.....","这啥破游戏......","秦始皇骑北极熊......"];
 
 const audio = {
@@ -89,7 +90,9 @@ const audio = {
         this.nightOSC = this.ctx.createOscillator(); this.nightOSC.type='sawtooth'; this.nightOSC.frequency.value=55; 
         this.nGain = this.ctx.createGain(); this.nGain.gain.value=0; const f = this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=200;
         this.nightOSC.connect(f).connect(this.nGain).connect(this.master); this.nightOSC.start();
-        const dangerOsc = this.ctx.createOscillator(); dangerOsc.type='sine'; dangerOsc.frequency.value=800;
+        
+        // 【怪物音效变低沉】
+        const dangerOsc = this.ctx.createOscillator(); dangerOsc.type='triangle'; dangerOsc.frequency.value=120;
         this.dGain = this.ctx.createGain(); this.dGain.gain.value=0;
         dangerOsc.connect(this.dGain).connect(this.master); dangerOsc.start();
         setInterval(() => this.playNote(), 2000);
@@ -101,16 +104,10 @@ const audio = {
         g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.08,t+1.5); g.gain.linearRampToValueAtTime(0,t+5);
         o.connect(g).connect(this.master); o.start(t); o.stop(t+5);
     },
-    // 魔性的秦始皇专属音乐（雄壮的8-bit和弦）
     playQin: function() {
-        if(!this.ctx) return; const t=this.ctx.currentTime;
-        [392, 493.88, 587.33, 783.99].forEach((f,i) => {
-            const o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.type='square'; o.frequency.value=f;
-            g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.15,t+0.1); g.gain.linearRampToValueAtTime(0,t+2);
-            o.connect(g).connect(this.master); o.start(t); o.stop(t+2);
-        });
+        const audioEl = document.getElementById('qin-audio');
+        if(audioEl) { audioEl.currentTime = 0; audioEl.play().catch(e=>console.log("音频需先点击屏幕互动才能播放")); }
     },
-    // 爆眼球的爆浆音效
     playSquish: function() {
         if(!this.ctx) return; const t=this.ctx.currentTime;
         const o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.type='triangle'; o.frequency.value=150;
@@ -144,19 +141,21 @@ const cv=document.createElement('canvas'); cv.width=cv.height=512; const x=cv.ge
 const gTex=new THREE.CanvasTexture(cv); gTex.wrapS=gTex.wrapT=THREE.RepeatWrapping; gTex.repeat.set(100,100);
 const ground=new THREE.Mesh(new THREE.PlaneGeometry(500,500),new THREE.MeshStandardMaterial({map:gTex,roughness:0.4,metalness:0.1})); ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
 
-// 碰撞检测组（给玩家和树增加隐形包围盒，方便手指点击）
 const hitBoxes = []; 
 
 const pGrp=new THREE.Group(); pGrp.position.y=0; scene.add(pGrp);
 const pLight=new THREE.PointLight('#ffb3d9',1.5,15); pLight.position.set(0,1,0); pGrp.add(pLight);
-// 玩家隐形点击盒
+
 const pHit = new THREE.Mesh(new THREE.SphereGeometry(3), new THREE.MeshBasicMaterial({visible:false}));
 pHit.userData = {isPlayer: true}; pGrp.add(pHit); hitBoxes.push(pHit);
+
+// 【新增的帐篷指示箭头】
+const tentPointer = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.5, 3), new THREE.MeshBasicMaterial({color:'#fd79a8', depthTest:false, transparent:true, opacity:0.8}));
+tentPointer.rotation.x = Math.PI/2; tentPointer.position.set(0, 0.2, 0); tentPointer.visible = false; pGrp.add(tentPointer);
 
 const sPs=[]; const sGeo=new THREE.SphereGeometry(0.4,8,8); const sMat=new THREE.MeshBasicMaterial({color:'#fff',transparent:true,opacity:0.4,blending:THREE.AdditiveBlending});
 for(let i=0;i<15;i++){ const p=new THREE.Mesh(sGeo,sMat); p.userData={y:Math.random()*2,s:0.02+Math.random()*0.02,a:Math.random()*Math.PI*2,r:Math.random()*0.3}; pGrp.add(p); sPs.push(p); }
 
-// 【树木增加到 65 棵，并加入砍伐机制】
 const eTs=[]; 
 for(let i=0;i<65;i++){ 
     const g=new THREE.Group(); 
@@ -167,15 +166,9 @@ for(let i=0;i<65;i++){
     const pu=new THREE.Mesh(new THREE.SphereGeometry(0.35,16,16),new THREE.MeshStandardMaterial({color:'#111',emissive:'#4d0000',emissiveIntensity:2})); pu.position.z=0.6; pu.scale.set(1,1.5,0.4); eg.add(pu); 
     g.add(eg); 
     const r=10+Math.random()*90,th=Math.random()*Math.PI*2; g.position.set(r*Math.cos(th),0,r*Math.sin(th)); scene.add(g); 
-    
-    // 树木隐形点击盒
     const tHit = new THREE.Mesh(new THREE.CylinderGeometry(2,2,8), new THREE.MeshBasicMaterial({visible:false}));
-    tHit.position.y=4; 
-    const treeData = {g:g, eg:eg, p:pu, chopped:false};
-    tHit.userData = {isTree: true, treeObj: treeData}; 
-    g.add(tHit); hitBoxes.push(tHit);
-    
-    eTs.push(treeData); 
+    tHit.position.y=4; const treeData = {g:g, eg:eg, p:pu, chopped:false}; tHit.userData = {isTree: true, treeObj: treeData}; 
+    g.add(tHit); hitBoxes.push(tHit); eTs.push(treeData); 
 }
 
 const pGeo = new THREE.ConeGeometry(0.4, 0.8, 4); 
@@ -197,16 +190,13 @@ function upSt(){ const d=stX.createImageData(128,128); for(let i=0;i<d.data.leng
 function cg(c){ const cv=document.createElement('canvas'); cv.width=cv.height=128; const x=cv.getContext('2d'), g=x.createRadialGradient(64,64,0,64,64,64); g.addColorStop(0,`rgba(${c},0.8)`); g.addColorStop(0.4,`rgba(${c},0.3)`); g.addColorStop(1,`rgba(${c},0)`); x.fillStyle=g; x.fillRect(0,0,128,128); return new THREE.CanvasTexture(cv); }
 const tvG=cg('0,206,201'), teG=cg('255,158,205');
 
-// 粒子爆炸系统 (砍树爆眼球用)
 const particles = [];
 const splatMat = new THREE.MeshBasicMaterial({color:'#cc0000'}); const whiteMat = new THREE.MeshBasicMaterial({color:'#ffffff'});
 function spawnExplosion(x, y, z) {
-    audio.playSquish(); // 爆浆音效
+    audio.playSquish(); 
     for(let i=0; i<30; i++) {
-        const isWhite = Math.random()>0.5;
-        const p = new THREE.Mesh(new THREE.BoxGeometry(0.3,0.3,0.3), isWhite?whiteMat:splatMat);
-        p.position.set(x, y, z);
-        p.userData = { vx:(Math.random()-0.5)*0.8, vy:Math.random()*0.8+0.2, vz:(Math.random()-0.5)*0.8, life:1.0 };
+        const isWhite = Math.random()>0.5; const p = new THREE.Mesh(new THREE.BoxGeometry(0.3,0.3,0.3), isWhite?whiteMat:splatMat);
+        p.position.set(x, y, z); p.userData = { vx:(Math.random()-0.5)*0.8, vy:Math.random()*0.8+0.2, vz:(Math.random()-0.5)*0.8, life:1.0 };
         scene.add(p); particles.push(p);
     }
 }
@@ -215,7 +205,8 @@ window.build=function(t){
     if(state.dead||state.win||!state.started||state.paused) return; const px=pGrp.position.x, pz=pGrp.position.z;
     if(t==='axe'&&!state.hasAxe&&state.frags>=20&&state.wood>=50) { state.frags-=20; state.wood-=50; state.hasAxe=true; sM("🪓 伐木斧获得! 点击大树砍伐"); }
     else if(t==='tv'&&state.frags>=10) { state.frags-=10; const g=new THREE.Group(); const sh=new THREE.Mesh(new THREE.BoxGeometry(2.5,2,1.5),new THREE.MeshStandardMaterial({color:'#2d3436'})); sh.position.y=2.5; sh.castShadow=true; g.add(sh); const s=new THREE.Mesh(new THREE.PlaneGeometry(2,1.5),new THREE.MeshBasicMaterial({map:stT})); s.position.set(0,2.5,0.76); g.add(s); g.add(new THREE.PointLight('#00cec9',5,30)).position.set(0,2.5,1); const a=new THREE.Sprite(new THREE.SpriteMaterial({map:tvG,color:'#00cec9',transparent:true,opacity:0.6,blending:THREE.AdditiveBlending,depthWrite:false})); a.scale.set(15,15,1); a.position.y=2.5; g.add(a); g.position.set(px,0,pz); scene.add(g); state.zones.push({t:'tv',x:px,z:pz,r:6,a:a,bs:15}); sM("📺 临时结界"); }
-    else if(t==='tent'&&state.frags>=25&&state.wood>=15) { state.frags-=25; state.wood-=15; const g=new THREE.Group(), geo=new THREE.ConeGeometry(3,5,4), m=new THREE.MeshStandardMaterial({color:'#fd79a8',emissive:'#fd79a8',emissiveIntensity:0.3,transparent:true,opacity:0.65,side:THREE.DoubleSide,depthWrite:false}); const te=new THREE.Mesh(geo,m); te.position.y=2.55; te.rotation.y=Math.PI/4; g.add(te); const lines=new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:'#3b2a5c',linewidth:2})); lines.position.y=2.55; lines.rotation.y=Math.PI/4; g.add(lines); g.add(new THREE.PointLight('#ff9ecd',4,25)).position.y=2; const a=new THREE.Sprite(new THREE.SpriteMaterial({map:teG,color:'#ff9ecd',transparent:true,opacity:0.6,blending:THREE.AdditiveBlending,depthWrite:false})); a.scale.set(18,18,1); a.position.y=2; g.add(a); g.position.set(px,0,pz); scene.add(g); state.zones.push({t:'tent',x:px,z:pz,r:9,a:a,bs:18}); sM("⛺ 庇护所建立"); }
+    // 【记录帐篷位置并显示箭头】
+    else if(t==='tent'&&state.frags>=25&&state.wood>=15) { state.frags-=25; state.wood-=15; const g=new THREE.Group(), geo=new THREE.ConeGeometry(3,5,4), m=new THREE.MeshStandardMaterial({color:'#fd79a8',emissive:'#fd79a8',emissiveIntensity:0.3,transparent:true,opacity:0.65,side:THREE.DoubleSide,depthWrite:false}); const te=new THREE.Mesh(geo,m); te.position.y=2.55; te.rotation.y=Math.PI/4; g.add(te); const lines=new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:'#3b2a5c',linewidth:2})); lines.position.y=2.55; lines.rotation.y=Math.PI/4; g.add(lines); g.add(new THREE.PointLight('#ff9ecd',4,25)).position.y=2; const a=new THREE.Sprite(new THREE.SpriteMaterial({map:teG,color:'#ff9ecd',transparent:true,opacity:0.6,blending:THREE.AdditiveBlending,depthWrite:false})); a.scale.set(18,18,1); a.position.y=2; g.add(a); g.position.set(px,0,pz); scene.add(g); state.zones.push({t:'tent',x:px,z:pz,r:9,a:a,bs:18}); state.tentPos={x:px,z:pz}; tentPointer.visible=true; sM("⛺ 庇护所建立"); }
     else if(t==='net'&&state.frags>=30&&state.wood>=20) { state.frags-=30; state.wood-=20; const g=new THREE.Group(), ri=new THREE.Mesh(new THREE.TorusGeometry(1.5,0.1,8,24),new THREE.MeshStandardMaterial({color:'#ffeaa7',emissive:'#ffb142',emissiveIntensity:0.6})); ri.position.y=3; ri.rotation.x=Math.PI/2; ri.castShadow=true; g.add(ri); const c=new THREE.Mesh(pGeo,pMat); c.position.y=3; c.castShadow=true; g.add(c); g.position.set(px,0,pz); scene.add(g); state.nets.push({g:g,r:ri,c:c}); sM("🕸️ 自动产出中"); }
     else if(t==='door'&&state.frags>=100&&state.wood>=80) { state.frags-=100; state.wood-=80; const g=new THREE.Group(), f=new THREE.Mesh(new THREE.BoxGeometry(4,7,0.5),new THREE.MeshStandardMaterial({color:'#fff',emissive:'#fff'})); f.position.y=3.5; f.castShadow=true; g.add(f); g.add(new THREE.PointLight('#fff',8,50)).position.set(0,3.5,1); g.position.set(px,0,pz); g.lookAt(px,0,pz); scene.add(g); state.win=true; document.getElementById('ui-layer').style.opacity=0; setTimeout(()=>document.getElementById('victory-screen').classList.add('active'),1000); }
     else if(t==='axe'&&state.hasAxe) { sM("已经拥有伐木斧了!"); }
@@ -230,14 +221,11 @@ let mt; function sM(t,d=3000){ const e=document.getElementById('msg-box'); e.inn
 function startGame(){ audio.init(); document.getElementById('start-screen').style.opacity=0; setTimeout(()=>{document.getElementById('start-screen').style.display='none';state.started=true;},500); }
 function togglePause(){ if(!state.started||state.dead||state.win) return; state.paused=!state.paused; document.getElementById('pause-screen').classList.toggle('active',state.paused); }
 
-// 【神金机制：碎碎念核心】
 function showQuote(forceQuote = null) { 
     if(state.dead||state.win||state.paused) return; 
     const el = document.getElementById('monologue'); 
     const q = forceQuote || quotes[Math.floor(Math.random()*quotes.length)];
     el.innerText = q; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); 
-    
-    // 【大聪明专属】触发秦始皇神曲
     if(q.includes("秦始皇")) {
         audio.playQin(); pLight.color.setHex(0xffff00); pLight.intensity=3;
         setTimeout(()=> {pLight.color.setHex(0xffb3d9); pLight.intensity=1.5;}, 2500);
@@ -254,7 +242,6 @@ function upUI(){
 }
 function gameO(){ if(state.dead||state.win) return; state.dead=true; audio.playGlitch(); document.getElementById('death-flash').classList.add('flash'); document.getElementById('survival-record').innerText=`活过了 ${state.nights} 夜`; document.getElementById('game-over').classList.add('active'); audio.stop(); }
 
-// 【核心大更新：射线检测 (点树、点人)】
 const raycaster = new THREE.Raycaster(); const mouse = new THREE.Vector2();
 window.addEventListener('click', (e) => {
     if(state.dead||state.win||!state.started||state.paused||e.clientX>innerWidth*0.75) return;
@@ -264,38 +251,16 @@ window.addEventListener('click', (e) => {
     
     if (intersects.length > 0) {
         const hit = intersects[0].object;
-        
-        // 1. 点中主角：发疯说话
-        if (hit.userData.isPlayer) {
-            showQuote();
-        } 
-        // 2. 点中大树：光头强逻辑
+        if (hit.userData.isPlayer) { showQuote(); } 
         else if (hit.userData.isTree && state.hasAxe) {
-            const tData = hit.userData.treeObj;
-            if (tData.chopped) return;
-            
-            // 距离检测，太远砍不到 (5步以内)
+            const tData = hit.userData.treeObj; if (tData.chopped) return;
             const dist = Math.hypot(pGrp.position.x - tData.g.position.x, pGrp.position.z - tData.g.position.z);
             if (dist > 5.0) { sM("太远了，走近点再砍"); return; }
-            
-            tData.chopped = true;
-            // 大树轰然倒塌
-            tData.g.children[0].rotation.x = Math.PI/2; 
-            tData.g.children[0].position.y = 0.5;
-            
-            // 爆眼球特效
-            tData.eg.visible = false;
-            spawnExplosion(tData.g.position.x, 4.5, tData.g.position.z);
-            
-            // 爆装备 (一次给5个幻梦木)
-            for(let j=0; j<5; j++) {
-                const ang=Math.random()*6, d=1+Math.random()*2;
-                spawnR('wood', tData.g.position.x+Math.cos(ang)*d, tData.g.position.z+Math.sin(ang)*d);
-            }
+            tData.chopped = true; tData.g.children[0].rotation.x = Math.PI/2; tData.g.children[0].position.y = 0.5;
+            tData.eg.visible = false; spawnExplosion(tData.g.position.x, 4.5, tData.g.position.z);
+            for(let j=0; j<5; j++) { const ang=Math.random()*6, d=1+Math.random()*2; spawnR('wood', tData.g.position.x+Math.cos(ang)*d, tData.g.position.z+Math.sin(ang)*d); }
             sM("🪓 伐木成功！", 1500);
-        } else if (hit.userData.isTree && !state.hasAxe) {
-            sM("需要购买🪓伐木斧才能砍树");
-        }
+        } else if (hit.userData.isTree && !state.hasAxe) { sM("需要购买🪓伐木斧才能砍树"); }
     }
 });
 
@@ -320,8 +285,6 @@ function anim(){
         const th=document.getElementById('time-hint');
         
         if(joy.a){pGrp.position.x+=joy.dx*0.12;pGrp.position.z+=joy.dy*0.12;}
-        
-        // 更新碰撞检测盒的位置跟随玩家
         pHit.position.copy(pGrp.position);
         
         for(let i=fRs.length-1;i>=0;i--){
@@ -349,15 +312,21 @@ function anim(){
     const dtT=state.started?state.time:clk.getElapsedTime();
     if(!state.paused) {
         sPs.forEach(p=>{p.userData.y+=p.userData.s+(state.win?0.1:0);const a=p.userData.a+dtT*2;p.position.set(Math.cos(a)*p.userData.r,p.userData.y,Math.sin(a)*p.userData.r);const l=p.userData.y/2.5;if(l>1&&!state.win)p.userData.y=0;else if(!state.win){p.scale.setScalar(1-l*0.8);p.material.opacity=0.5*(1-l);}});
-        eTs.forEach(e=>{if(e.chopped)return; const dx=pGrp.position.x-e.g.parent.position.x,dz=pGrp.position.z-e.g.parent.position.z;let df=Math.atan2(dx,dz)-e.g.rotation.y;while(df<-Math.PI)df+=Math.PI*2;while(df>Math.PI)df-=Math.PI*2;e.g.rotation.y+=df*0.08;const s=1+Math.sin(dtT*2)*0.1;e.p.scale.set(s,1.4*s,0.4);});
         
-        // 渲染爆浆粒子
+        // 【修复：现在大树的眼睛会转了！】
+        eTs.forEach(e=>{if(e.chopped)return; const dx=pGrp.position.x-e.g.position.x,dz=pGrp.position.z-e.g.position.z;let df=Math.atan2(dx,dz)-e.eg.rotation.y;while(df<-Math.PI)df+=Math.PI*2;while(df>Math.PI)df-=Math.PI*2;e.eg.rotation.y+=df*0.08;const s=1+Math.sin(dtT*2)*0.1;e.p.scale.set(s,1.4*s,0.4);});
+        
+        // 【新增：让粉色箭头指引回家的路】
+        if(state.tentPos && tentPointer.visible) {
+            let ang = Math.atan2(state.tentPos.x - pGrp.position.x, state.tentPos.z - pGrp.position.z);
+            tentPointer.rotation.y = ang;
+            tentPointer.position.set(Math.sin(ang)*2.5, 0.5, Math.cos(ang)*2.5);
+        }
+        
         for(let i=particles.length-1; i>=0; i--) {
             const p = particles[i];
             p.position.x += p.userData.vx; p.position.y += p.userData.vy; p.position.z += p.userData.vz;
-            p.userData.vy -= 0.05; // 重力
-            p.userData.life -= 0.02;
-            p.scale.setScalar(p.userData.life);
+            p.userData.vy -= 0.05; p.userData.life -= 0.02; p.scale.setScalar(p.userData.life);
             if(p.userData.life <= 0) { scene.remove(p); particles.splice(i,1); }
         }
 
@@ -371,5 +340,3 @@ window.onload=()=>{upUI();anim();};
 </script>
 </body>
 </html>
-
-

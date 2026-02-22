@@ -1,329 +1,340 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>芽芽的 3D 梦核生存：幻音觉醒</title>
-    <!-- 引入 Three.js 核心库 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <style>
-        body { margin: 0; overflow: hidden; background-color: #2a2035; touch-action: none; font-family: 'Courier New', monospace; }
-        canvas { display: block; width: 100vw; height: 100vh; }
-        
-        #ui-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; display: flex; flex-direction: column; justify-content: space-between;
-            padding: env(safe-area-inset-top, 20px) 20px 30px 20px; box-sizing: border-box;
-            transition: box-shadow 1s ease;
-        }
-
-        .top-bar { display: flex; justify-content: space-between; pointer-events: auto; }
-        
-        .glass-box {
-            background: rgba(42, 32, 53, 0.4); backdrop-filter: blur(8px);
-            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;
-            padding: 10px 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            color: #d8c8e3; font-weight: bold; font-size: 13px; letter-spacing: 1px;
-        }
-        
-        .sanity-bar-bg { 
-            width: 120px; height: 6px; background: rgba(0, 0, 0, 0.5); 
-            border-radius: 3px; margin-top: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);
-        }
-        .sanity-bar-fill { 
-            width: 100%; height: 100%; background: linear-gradient(90deg, #d48bb5, #7d96b3); 
-            transition: width 0.2s, background 0.5s;
-        }
-        .sanity-bar-fill.danger { background: linear-gradient(90deg, #c0392b, #e74c3c); }
-
-        .build-menu {
-            position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
-            display: flex; flex-direction: column; gap: 15px; pointer-events: auto;
-        }
-        
-        .build-btn {
-            width: 50px; height: 50px; border-radius: 50%;
-            background: rgba(20, 15, 25, 0.5); backdrop-filter: blur(10px);
-            border: 2px solid rgba(150, 150, 150, 0.3); 
-            display: flex; align-items: center; justify-content: center; font-size: 20px; 
-            box-shadow: 0 0 10px rgba(0,0,0,0.5); position: relative; transition: all 0.3s; opacity: 0.5;
-        }
-        .build-btn.can-build { opacity: 1; transform: scale(1.05); background: rgba(255, 255, 255, 0.1); border-color: rgba(255,255,255,0.5); }
-        .build-btn:active { transform: scale(0.85); }
-        
-        .build-cost {
-            position: absolute; bottom: -18px; width: 180%; text-align: center; left: -40%;
-            background: rgba(20, 15, 25, 0.85); font-size: 9px; padding: 3px 0; border-radius: 6px;
-            color: #d8c8e3; font-weight: bold; letter-spacing: 0.5px;
-        }
-
-        .text-frag { color: #ffeaa7; text-shadow: 0 0 5px rgba(255,177,66,0.5); } 
-        .text-wood { color: #fd79a8; } 
-        .text-hint-day { color: #00cec9; } 
-        .text-hint-night { color: #ff0044; text-shadow: 0 0 8px rgba(255,0,68,0.8); } 
-        .text-hint-warn { color: #ffb142; }
-
-        #msg-box {
-            position: absolute; top: 15%; left: 50%; transform: translateX(-50%);
-            color: #e8dcf5; font-size: 14px; letter-spacing: 2px;
-            background: rgba(20, 15, 25, 0.7); padding: 8px 20px; border-radius: 20px;
-            opacity: 0; transition: opacity 0.5s; pointer-events: none; border: 1px solid rgba(255,255,255,0.1);
-        }
-
-        /* 入梦弹窗 */
-        #start-screen {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(26, 16, 37, 0.95); display: flex; flex-direction: column;
-            align-items: center; justify-content: center; color: #d8c8e3;
-            z-index: 200; transition: opacity 0.5s; pointer-events: auto;
-        }
-        .start-title {
-            font-size: 28px; color: #a29bfe; letter-spacing: 6px; font-weight: bold;
-            text-shadow: 0 0 15px rgba(162, 155, 254, 0.6); margin-bottom: 20px;
-        }
-        .start-content {
-            background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(162, 155, 254, 0.3);
-            padding: 15px; border-radius: 15px; text-align: left; line-height: 1.8; font-size: 12px;
-            max-width: 85%; letter-spacing: 1px;
-        }
-        .start-btn {
-            margin-top: 30px; padding: 12px 40px; background: rgba(162, 155, 254, 0.1);
-            border: 2px solid #a29bfe; border-radius: 25px; color: #a29bfe; font-family: 'Courier New', monospace;
-            font-size: 18px; font-weight: bold; cursor: pointer; transition: all 0.3s;
-        }
-        .start-btn:active { background: #a29bfe; color: #1a1025; transform: scale(0.95); }
-
-        /* 死亡与胜利屏幕 */
-        #game-over {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(10, 5, 15, 0.95); display: flex; flex-direction: column;
-            align-items: center; justify-content: center; color: #ff0044; font-size: 24px;
-            z-index: 100; opacity: 0; pointer-events: none; transition: opacity 1s; letter-spacing: 5px; text-align: center;
-        }
-        #game-over.active { opacity: 1; pointer-events: auto; }
-        
-        #victory-screen {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(255, 255, 255, 0.95); display: flex; flex-direction: column;
-            align-items: center; justify-content: center; color: #a29bfe; font-size: 28px;
-            z-index: 100; opacity: 0; pointer-events: none; transition: opacity 3s; letter-spacing: 8px; text-align: center;
-            font-weight: bold; text-shadow: 0 0 20px #fff;
-        }
-        #victory-screen.active { opacity: 1; pointer-events: auto; }
-
-        .restart-btn {
-            margin-top: 30px; padding: 12px 35px; background: transparent; border: 2px solid currentColor;
-            border-radius: 20px; font-size: 16px; font-weight: bold; font-family: 'Courier New', monospace;
-            cursor: pointer; transition: all 0.3s;
-        }
-        .restart-btn:active { background: currentColor; color: #fff; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>芽芽的 3D 梦核生存：幻音觉醒</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+body{margin:0;overflow:hidden;background-color:#2a2035;touch-action:none;font-family:'Courier New',monospace;}
+canvas{display:block;width:100vw;height:100vh;}
+#ui-layer{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;padding:env(safe-area-inset-top, 20px) 20px 30px 20px;box-sizing:border-box;transition:box-shadow 1s ease;}
+.top-bar{display:flex;justify-content:space-between;pointer-events:auto;}
+.glass-box{background:rgba(42,32,53,0.4);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:10px 15px;box-shadow:0 5px 15px rgba(0,0,0,0.3);color:#d8c8e3;font-weight:bold;font-size:13px;letter-spacing:1px;}
+.sanity-bar-bg{width:120px;height:6px;background:rgba(0,0,0,0.5);border-radius:3px;margin-top:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.1);}
+.sanity-bar-fill{width:100%;height:100%;background:linear-gradient(90deg,#d48bb5,#7d96b3);transition:width 0.2s,background 0.5s;}
+.sanity-bar-fill.danger{background:linear-gradient(90deg,#c0392b,#e74c3c);}
+.build-menu{position:absolute;right:20px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:15px;pointer-events:auto;}
+.build-btn{width:50px;height:50px;border-radius:50%;background:rgba(20,15,25,0.5);backdrop-filter:blur(10px);border:2px solid rgba(150,150,150,0.3);display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 0 10px rgba(0,0,0,0.5);position:relative;transition:all 0.3s;opacity:0.5;}
+.build-btn.can-build{opacity:1;transform:scale(1.05);background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.5);}
+.build-btn:active{transform:scale(0.85);}
+.build-cost{position:absolute;bottom:-18px;width:180%;text-align:center;left:-40%;background:rgba(20,15,25,0.85);font-size:9px;padding:3px 0;border-radius:6px;color:#d8c8e3;font-weight:bold;letter-spacing:0.5px;}
+.text-frag{color:#ffeaa7;text-shadow:0 0 5px rgba(255,177,66,0.5);}
+.text-wood{color:#fd79a8;}
+.text-hint-day{color:#00cec9;}
+.text-hint-night{color:#ff0044;text-shadow:0 0 8px rgba(255,0,68,0.8);}
+.text-hint-warn{color:#ffb142;}
+#msg-box{position:absolute;top:15%;left:50%;transform:translateX(-50%);color:#e8dcf5;font-size:14px;letter-spacing:2px;background:rgba(20,15,25,0.7);padding:8px 20px;border-radius:20px;opacity:0;transition:opacity 0.5s;pointer-events:none;border:1px solid rgba(255,255,255,0.1);}
+#start-screen{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(26,16,37,0.95);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#d8c8e3;z-index:200;transition:opacity 0.5s;pointer-events:auto;}
+.start-title{font-size:28px;color:#a29bfe;letter-spacing:6px;font-weight:bold;text-shadow:0 0 15px rgba(162,155,254,0.6);margin-bottom:20px;}
+.start-content{background:rgba(255,255,255,0.05);border:1px solid rgba(162,155,254,0.3);padding:15px;border-radius:15px;text-align:left;line-height:1.8;font-size:12px;max-width:85%;letter-spacing:1px;}
+.start-btn{margin-top:30px;padding:12px 40px;background:rgba(162,155,254,0.1);border:2px solid #a29bfe;border-radius:25px;color:#a29bfe;font-family:'Courier New',monospace;font-size:18px;font-weight:bold;cursor:pointer;transition:all 0.3s;}
+.start-btn:active{background:#a29bfe;color:#1a1025;transform:scale(0.95);}
+#game-over,#victory-screen{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity 1s;letter-spacing:5px;text-align:center;}
+#game-over{background:rgba(10,5,15,0.95);color:#ff0044;font-size:24px;}
+#victory-screen{background:rgba(255,255,255,0.95);color:#a29bfe;font-size:28px;font-weight:bold;text-shadow:0 0 20px #fff;transition:opacity 3s;}
+#game-over.active,#victory-screen.active{opacity:1;pointer-events:auto;}
+.restart-btn{margin-top:30px;padding:12px 35px;background:transparent;border:2px solid currentColor;border-radius:20px;font-size:16px;font-weight:bold;font-family:'Courier New',monospace;cursor:pointer;transition:all 0.3s;}
+.restart-btn:active{background:currentColor;color:#fff;}
+</style>
 </head>
 <body>
+<div id="start-screen">
+<div class="start-title">梦核边缘</div>
+<div class="start-content">
+✦ 滑动左侧移动。收集 <span class="text-frag">金色碎片</span> 与木材。<br>
+✦ <b style="color:#00cec9">📺电视：阻挡怪物，理智缓慢流失(临时保命)</b><br>
+✦ <b style="color:#fd79a8">⛺帐篷：阻挡怪物，安全恢复理智(真正据点)</b><br>
+✦ <b style="color:#ffeaa7">🕸️捕梦网：全自动生产碎片！</b><br>
+✦ <b style="color:#fff;text-shadow:0 0 5px #fff;">🚪唤醒之门：终极目标，逃离梦境。</b><br>
+<div style="text-align:center;margin-top:10px;color:#00cec9;">🎧 建议佩戴耳机游玩</div>
+</div>
+<button class="start-btn" onclick="startGame()">入梦</button>
+</div>
 
-    <div id="start-screen">
-        <div class="start-title">梦核边缘</div>
-        <div class="start-content">
-            ✦ 滑动左侧移动。收集 <span class="text-frag">金色碎片</span> 与木材。<br>
-            ✦ <b style="color:#00cec9">📺电视机：阻挡怪物，理智缓慢流失（临时保命）</b><br>
-            ✦ <b style="color:#fd79a8">⛺帐篷：阻挡怪物，安全恢复理智（真正据点）</b><br>
-            ✦ <b style="color:#ffeaa7">🕸️捕梦网：全自动生产碎片！</b><br>
-            ✦ <b style="color:#fff; text-shadow: 0 0 5px #fff;">🚪唤醒之门：终极目标，逃离梦境。</b><br>
-            <div style="text-align: center; margin-top:10px; color:#00cec9;">🎧 建议佩戴耳机游玩</div>
-        </div>
-        <button class="start-btn" onclick="startGame()">入梦</button>
-    </div>
+<div id="ui-layer">
+<div class="top-bar">
+<div class="glass-box"><div style="margin-bottom:6px;">✨ 碎片: <span id="frag-count" class="text-frag">0</span></div><div>🪵 木材: <span id="wood-count" class="text-wood">0</span></div></div>
+<div class="glass-box" style="text-align:right;"><div id="time-hint" class="text-hint-day" style="font-size:10px;opacity:0.8;">白天 (收集)</div><div class="sanity-bar-bg"><div id="sanity-fill" class="sanity-bar-fill"></div></div></div>
+</div>
+<div class="build-menu">
+<div class="build-btn" id="btn-tv" onclick="build('tv')">📺<div class="build-cost">10碎</div></div>
+<div class="build-btn" id="btn-tent" onclick="build('tent')">⛺<div class="build-cost">25碎 15木</div></div>
+<div class="build-btn" id="btn-net" onclick="build('net')">🕸️<div class="build-cost">40碎 30木</div></div>
+<div class="build-btn" id="btn-door" onclick="build('door')" style="border-color:#fff;box-shadow:0 0 15px #fff;">🚪<div class="build-cost">100碎 80木</div></div>
+</div>
+<div id="msg-box"></div>
+</div>
 
-    <div id="ui-layer">
-        <div class="top-bar">
-            <div class="glass-box">
-                <div style="margin-bottom: 6px;">✨ 碎片: <span id="frag-count" class="text-frag">0</span></div>
-                <div>🪵 木材: <span id="wood-count" class="text-wood">0</span></div>
-            </div>
-            <div class="glass-box" style="text-align: right;">
-                <div id="time-hint" class="text-hint-day" style="font-size: 10px; opacity: 0.8;">白天 (收集)</div>
-                <div class="sanity-bar-bg"><div id="sanity-fill" class="sanity-bar-fill"></div></div>
-            </div>
-        </div>
+<div id="game-over"><div>梦境已崩塌。</div><div id="survival-record" style="font-size:14px;margin-top:10px;color:#666;"></div><button class="restart-btn" style="color:#6e8a9f" onclick="location.reload()">重新入梦</button></div>
+<div id="victory-screen"><div>你醒了。</div><div style="font-size:14px;margin-top:20px;color:#666;letter-spacing:2px;">理智与音乐共存。</div><button class="restart-btn" style="color:#a29bfe;margin-top:50px;" onclick="location.reload()">再次入睡</button></div>
 
-        <div class="build-menu">
-            <!-- 添加了关于建筑分工的 tooltip 暗示 -->
-            <div class="build-btn" id="btn-tv" onclick="build('tv')" title="临时阻挡怪物，理智仍会流失">📺<div class="build-cost">10碎</div></div>
-            <div class="build-btn" id="btn-tent" onclick="build('tent')" title="安全恢复理智">⛺<div class="build-cost">25碎 15木</div></div>
-            <div class="build-btn" id="btn-net" onclick="build('net')" title="自动生产碎片">🕸️<div class="build-cost">40碎 30木</div></div>
-            <div class="build-btn" id="btn-door" onclick="build('door')" style="border-color: #fff; box-shadow: 0 0 15px #fff;" title="逃离梦境">🚪<div class="build-cost">100碎 80木</div></div>
-        </div>
-        
-        <div id="msg-box"></div>
-    </div>
+<script>
+const state = { gameStarted: false, gameTime: 0, frags: 0, wood: 0, sanity: 100, isDead: false, victory: false, safeZones: [], nightCount: 0, isCurrentlyNight: false, nets: [], lastFragGenTime: 0 };
+const audioEngine = {
+    ctx: null, masterGain: null, dayDrone: null, nightDrone: null, nightGain: null,
+    init: function() {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioContext();
+        if(this.ctx.state === 'suspended') this.ctx.resume();
+        this.masterGain = this.ctx.createGain(); this.masterGain.gain.value = 0.5; 
+        const delay = this.ctx.createDelay(); delay.delayTime.value = 0.5;
+        const feedback = this.ctx.createGain(); feedback.gain.value = 0.3;
+        delay.connect(feedback); feedback.connect(delay);
+        this.masterGain.connect(delay); delay.connect(this.ctx.destination); this.masterGain.connect(this.ctx.destination);
+        this.dayDrone = this.ctx.createOscillator(); this.dayDrone.type = 'sine'; this.dayDrone.frequency.value = 110; 
+        const dayGain = this.ctx.createGain(); dayGain.gain.value = 0.15;
+        this.dayDrone.connect(dayGain).connect(this.masterGain); this.dayDrone.start();
+        this.nightDrone = this.ctx.createOscillator(); this.nightDrone.type = 'sawtooth'; this.nightDrone.frequency.value = 55; 
+        this.nightGain = this.ctx.createGain(); this.nightGain.gain.value = 0; 
+        const filter = this.ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 200; 
+        this.nightDrone.connect(filter).connect(this.nightGain).connect(this.masterGain); this.nightDrone.start();
+        setInterval(() => this.playEtherealNote(), 2000);
+    },
+    playEtherealNote: function() {
+        if (!state.gameStarted || state.isDead || state.victory || !this.ctx) return;
+        const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+        const notes = [220, 246.94, 277.18, 329.63, 369.99, 440, 493.88, 554.37, 659.25];
+        osc.frequency.value = notes[Math.floor(Math.random() * notes.length)]; osc.type = 'sine';
+        const now = this.ctx.currentTime;
+        gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.05+Math.random()*0.05, now+1.5); gain.gain.linearRampToValueAtTime(0, now+5);
+        osc.connect(gain).connect(this.masterGain); osc.start(now); osc.stop(now+5);
+    },
+    playVictoryChord: function() {
+        if (!this.ctx) return;
+        this.nightGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime+2);
+        [440, 554.37, 659.25, 880].forEach((freq, idx) => {
+            const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+            osc.frequency.value = freq; osc.type = 'sine'; const now = this.ctx.currentTime;
+            gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.1, now+2+idx*0.5); 
+            osc.connect(gain).connect(this.masterGain); osc.start(now);
+        });
+    },
+    stopAll: function() { if(this.masterGain) this.masterGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime+2); }
+};
 
-    <div id="game-over">
-        <div>梦境已崩塌。</div>
-        <div id="survival-record" style="font-size: 14px; margin-top: 10px; color: #666;"></div>
-        <button class="restart-btn" style="color:#6e8a9f" onclick="location.reload()">重新入梦</button>
-    </div>
+const scene = new THREE.Scene();
+const dayColor = new THREE.Color('#c8bce5'); const nightColor = new THREE.Color('#1a1025');
+scene.background = dayColor.clone(); scene.fog = new THREE.FogExp2(dayColor.clone(), 0.025); 
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.9; 
+document.body.appendChild(renderer.domElement);
 
-    <div id="victory-screen">
-        <div>你醒了。</div>
-        <div style="font-size: 14px; margin-top: 20px; color: #666; letter-spacing: 2px;">理智与音乐共存。</div>
-        <button class="restart-btn" style="color:#a29bfe; margin-top: 50px;" onclick="location.reload()">再次入睡</button>
-    </div>
+const ambientLight = new THREE.AmbientLight('#ffffff', 0.8); scene.add(ambientLight);
+const dirLight = new THREE.DirectionalLight('#ffe0ec', 0.8); dirLight.position.set(20,50,-20); dirLight.castShadow = true;
+dirLight.shadow.mapSize.width = 1024; dirLight.shadow.mapSize.height = 1024; dirLight.shadow.camera.near = 0.5; dirLight.shadow.camera.far = 100;
+const d = 40; dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d; dirLight.shadow.camera.top = d; dirLight.shadow.camera.bottom = -d;
+scene.add(dirLight);
 
-    <script>
-        // --- 0. 游戏核心状态 ---
-        const state = {
-            gameStarted: false, gameTime: 0, 
-            frags: 0, wood: 0, sanity: 100, isDead: false, victory: false,
-            safeZones: [], nightCount: 0, isCurrentlyNight: false,
-            nets: [], lastFragGenTime: 0 
-        };
+function createCheckerBoard() {
+    const canvas = document.createElement('canvas'); canvas.width=512; canvas.height=512; const ctx = canvas.getContext('2d');
+    ctx.fillStyle='#b6a6d3'; ctx.fillRect(0,0,512,512); ctx.fillStyle='#c5b6e0'; ctx.fillRect(0,0,256,256); ctx.fillRect(256,256,256,256);
+    return new THREE.CanvasTexture(canvas);
+}
+const groundTex = createCheckerBoard(); groundTex.wrapS=groundTex.wrapT=THREE.RepeatWrapping; groundTex.repeat.set(100,100); 
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(500,500), new THREE.MeshStandardMaterial({map:groundTex, roughness:0.4, metalness:0.1}));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
 
-        // --- 🎵 A. 生成式音频引擎 ---
-        const audioEngine = {
-            ctx: null, masterGain: null, dayDrone: null, nightDrone: null, nightGain: null,
-            init: function() {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                this.ctx = new AudioContext();
-                this.masterGain = this.ctx.createGain();
-                this.masterGain.gain.value = 0.5; 
-                
-                const delay = this.ctx.createDelay();
-                delay.delayTime.value = 0.5;
-                const feedback = this.ctx.createGain();
-                feedback.gain.value = 0.3;
-                delay.connect(feedback); feedback.connect(delay);
-                this.masterGain.connect(delay); delay.connect(this.ctx.destination);
-                this.masterGain.connect(this.ctx.destination);
+const playerGroup = new THREE.Group(); playerGroup.position.y = 0; scene.add(playerGroup);
+const playerLight = new THREE.PointLight('#ffb3d9', 1.5, 15); playerLight.position.set(0,1,0); playerGroup.add(playerLight);
+const smokeParticles = []; const smokeGeo = new THREE.SphereGeometry(0.4,8,8); const smokeMat = new THREE.MeshBasicMaterial({color:'#ffffff',transparent:true,opacity:0.4,blending:THREE.AdditiveBlending});
+for(let i=0; i<15; i++) {
+    const p = new THREE.Mesh(smokeGeo, smokeMat);
+    p.userData = {yOffset:Math.random()*2, speed:0.02+Math.random()*0.02, angle:Math.random()*Math.PI*2, radius:Math.random()*0.3};
+    playerGroup.add(p); smokeParticles.push(p);
+}
 
-                this.dayDrone = this.ctx.createOscillator();
-                this.dayDrone.type = 'sine'; this.dayDrone.frequency.value = 110; 
-                const dayGain = this.ctx.createGain(); dayGain.gain.value = 0.15;
-                this.dayDrone.connect(dayGain).connect(this.masterGain); this.dayDrone.start();
+const eyeTrees = [];
+for(let i=0; i<35; i++) {
+    const tg = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.5,5,8), new THREE.MeshStandardMaterial({color:'#e0d5dd',roughness:0.2,transparent:true,opacity:0.35,depthWrite:false}));
+    trunk.position.y=2.5; tg.add(trunk);
+    const eg = new THREE.Group(); eg.position.y=4.5; 
+    eg.add(new THREE.Mesh(new THREE.SphereGeometry(0.8,16,16), new THREE.MeshStandardMaterial({color:'#fff9c4'})));
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.35,16,16), new THREE.MeshStandardMaterial({color:'#111',emissive:'#4d0000',emissiveIntensity:2}));
+    pupil.position.z=0.6; pupil.scale.set(1,1.5,0.4); eg.add(pupil); tg.add(eg);
+    const r=10+Math.random()*70; const theta=Math.random()*Math.PI*2;
+    tg.position.set(r*Math.cos(theta),0,r*Math.sin(theta)); scene.add(tg); eyeTrees.push({group:eg, pupil:pupil}); 
+}
 
-                this.nightDrone = this.ctx.createOscillator();
-                this.nightDrone.type = 'sawtooth'; this.nightDrone.frequency.value = 55; 
-                this.nightGain = this.ctx.createGain(); this.nightGain.gain.value = 0; 
-                const filter = this.ctx.createBiquadFilter();
-                filter.type = 'lowpass'; filter.frequency.value = 200; 
-                this.nightDrone.connect(filter).connect(this.nightGain).connect(this.masterGain);
-                this.nightDrone.start();
+const floatingResources = [];
+function spawnResource(type, x, z) {
+    let m;
+    if(type==='frag') { m = new THREE.Mesh(new THREE.OctahedronGeometry(0.45), new THREE.MeshStandardMaterial({color:'#ffeaa7',emissive:'#ffb142',emissiveIntensity:0.8,transparent:true,opacity:0.9,roughness:0.1})); }
+    else { m = new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.25,1.5,5), new THREE.MeshStandardMaterial({color:'#fd79a8',emissive:'#6c5ce7',emissiveIntensity:0.3,roughness:0.5})); m.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI); }
+    m.userData = {type:type, baseY:0.8, offset:Math.random()*Math.PI*2}; m.position.set(x,0.8,z); m.castShadow=true; scene.add(m); floatingResources.push(m);
+}
+for(let i=0; i<150; i++) spawnResource('frag', (Math.random()-0.5)*140, (Math.random()-0.5)*140);
+for(let i=0; i<80; i++) spawnResource('wood', (Math.random()-0.5)*140, (Math.random()-0.5)*140);
 
-                setInterval(() => this.playEtherealNote(), 2000);
-            },
-            playEtherealNote: function() {
-                if (!state.gameStarted || state.isDead || state.victory || !this.ctx) return;
-                const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
-                const notes = [220, 246.94, 277.18, 329.63, 369.99, 440, 493.88, 554.37, 659.25];
-                osc.frequency.value = notes[Math.floor(Math.random() * notes.length)];
-                osc.type = 'sine';
-                const now = this.ctx.currentTime;
-                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.05 + Math.random()*0.05, now + 1.5); gain.gain.linearRampToValueAtTime(0, now + 5);
-                osc.connect(gain).connect(this.masterGain); osc.start(now); osc.stop(now + 5);
-            },
-            playVictoryChord: function() {
-                if (!this.ctx) return;
-                this.nightGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 2);
-                [440, 554.37, 659.25, 880].forEach((freq, idx) => {
-                    const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
-                    osc.frequency.value = freq; osc.type = 'sine'; const now = this.ctx.currentTime;
-                    gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.1, now + 2 + idx*0.5); 
-                    osc.connect(gain).connect(this.masterGain); osc.start(now);
+const staticTexCanvas = document.createElement('canvas'); staticTexCanvas.width=128; staticTexCanvas.height=128;
+const staticCtx = staticTexCanvas.getContext('2d'); const staticTex = new THREE.CanvasTexture(staticTexCanvas);
+function updateStatic() {
+    const d = staticCtx.createImageData(128,128);
+    for(let i=0; i<d.data.length; i+=4) { const v=Math.random()*255; d.data[i]=d.data[i+1]=d.data[i+2]=v; d.data[i+3]=255; }
+    staticCtx.putImageData(d,0,0); staticTex.needsUpdate=true;
+}
+function createGlowTex(c) {
+    const cv = document.createElement('canvas'); cv.width=128; cv.height=128; const ctx=cv.getContext('2d');
+    const grd = ctx.createRadialGradient(64,64,0,64,64,64); grd.addColorStop(0,`rgba(${c},0.8)`); grd.addColorStop(0.4,`rgba(${c},0.3)`); grd.addColorStop(1,`rgba(${c},0)`);
+    ctx.fillStyle=grd; ctx.fillRect(0,0,128,128); return new THREE.CanvasTexture(cv);
+}
+const tvGlowTex = createGlowTex('0,206,201'); const tentGlowTex = createGlowTex('255,158,205');
+
+function createTV(x, z) {
+    const g = new THREE.Group();
+    const shell = new THREE.Mesh(new THREE.BoxGeometry(2.5,2,1.5), new THREE.MeshStandardMaterial({color:'#2d3436'})); shell.position.y=2.5; shell.castShadow=true; g.add(shell);
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(2,1.5), new THREE.MeshBasicMaterial({map:staticTex})); screen.position.set(0,2.5,0.76); g.add(screen);
+    const light = new THREE.PointLight('#00cec9',5,30); light.position.set(0,2.5,1); g.add(light);
+    const aura = new THREE.Sprite(new THREE.SpriteMaterial({map:tvGlowTex,color:'#00cec9',transparent:true,opacity:0.6,blending:THREE.AdditiveBlending,depthWrite:false}));
+    aura.scale.set(15,15,1); aura.position.set(0,2.5,0); g.add(aura); g.position.set(x,0,z); scene.add(g);
+    state.safeZones.push({type:'tv',x:x,z:z,radius:6,auraMesh:aura,baseScale:15});
+}
+function createTent(x, z) {
+    const g = new THREE.Group();
+    const tentGeo = new THREE.ConeGeometry(3,5,4); const tentMat = new THREE.MeshStandardMaterial({color:'#fd79a8',emissive:'#fd79a8',emissiveIntensity:0.3,transparent:true,opacity:0.65,roughness:0.2,side:THREE.DoubleSide,depthWrite:false});
+    const tent = new THREE.Mesh(tentGeo,tentMat); tent.position.y=2.55; tent.rotation.y=Math.PI/4; g.add(tent);
+    const lines = new THREE.LineSegments(new THREE.EdgesGeometry(tentGeo), new THREE.LineBasicMaterial({color:'#3b2a5c',linewidth:2})); lines.position.y=2.55; lines.rotation.y=Math.PI/4; g.add(lines);
+    const light = new THREE.PointLight('#ff9ecd',4,25); light.position.set(0,2,0); g.add(light);
+    const aura = new THREE.Sprite(new THREE.SpriteMaterial({map:tentGlowTex,color:'#ff9ecd',transparent:true,opacity:0.6,blending:THREE.AdditiveBlending,depthWrite:false}));
+    aura.scale.set(18,18,1); aura.position.set(0,2,0); g.add(aura); g.position.set(x,0,z); scene.add(g);
+    state.safeZones.push({type:'tent',x:x,z:z,radius:9,auraMesh:aura,baseScale:18});
+}
+function createNet(x, z) {
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.5,0.1,8,24), new THREE.MeshStandardMaterial({color:'#ffeaa7',emissive:'#ffb142',emissiveIntensity:0.6})); ring.position.y=3; ring.rotation.x=Math.PI/2; g.add(ring);
+    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.4), new THREE.MeshBasicMaterial({color:'#fff'})); core.position.y=3; g.add(core);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,3,4), new THREE.MeshStandardMaterial({color:'#3b2a5c'})); post.position.y=1.5; g.add(post);
+    g.position.set(x,0,z); scene.add(g); state.nets.push({group:g,ring:ring,core:core});
+}
+function createDoor(x, z) {
+    const g = new THREE.Group();
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(4,7,0.5), new THREE.MeshStandardMaterial({color:'#fff',emissive:'#fff',emissiveIntensity:0.8})); frame.position.y=3.5; g.add(frame);
+    const portal = new THREE.Mesh(new THREE.PlaneGeometry(3.6,6.6), new THREE.MeshBasicMaterial({color:'#fff'})); portal.position.set(0,3.5,0.3); g.add(portal);
+    const doorLight = new THREE.PointLight('#fff',8,50); doorLight.position.set(0,3.5,1); g.add(doorLight);
+    g.position.set(x,0,z); g.lookAt(playerGroup.position.x,0,playerGroup.position.z); scene.add(g);
+}
+
+const nightmares = []; const glitchMat = new THREE.MeshBasicMaterial({color:'#000000',wireframe:true,transparent:true,opacity:0.8});
+function spawnNightmare() {
+    const nmGrp = new THREE.Group();
+    const core1 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8,0), new THREE.MeshBasicMaterial({color:'#111'}));
+    const core2 = new THREE.Mesh(new THREE.BoxGeometry(1.5,0.5,1.5), glitchMat); nmGrp.add(core1); nmGrp.add(core2);
+    const r=40+Math.random()*40; const theta=Math.random()*Math.PI*2;
+    nmGrp.position.set(playerGroup.position.x+r*Math.cos(theta),2,playerGroup.position.z+r*Math.sin(theta));
+    nmGrp.userData = {baseSpeed:0.015+Math.random()*0.005}; scene.add(nmGrp); nightmares.push({group:nmGrp,meshes:[core1,core2]});
+}
+for(let i=0; i<2; i++) spawnNightmare();
+
+let msgTimeout; function showMsg(t,d=3000) { const el=document.getElementById('msg-box'); el.innerText=t; el.style.opacity=1; clearTimeout(msgTimeout); msgTimeout=setTimeout(()=>el.style.opacity=0,d); }
+
+function startGame() {
+    audioEngine.init(); document.getElementById('start-screen').style.opacity=0;
+    setTimeout(() => { document.getElementById('start-screen').style.display='none'; state.gameStarted=true; showMsg("快跑！去捡金色的碎片！",4000); }, 500);
+}
+
+function updateUI() {
+    document.getElementById('frag-count').innerText=state.frags; document.getElementById('wood-count').innerText=state.wood;
+    const f=document.getElementById('sanity-fill'); f.style.width=Math.max(0,state.sanity)+'%';
+    if(state.sanity<30) f.classList.add('danger'); else f.classList.remove('danger');
+    document.getElementById('btn-tv').classList.toggle('can-build', state.frags>=10);
+    document.getElementById('btn-tent').classList.toggle('can-build', state.frags>=25 && state.wood>=15);
+    document.getElementById('btn-net').classList.toggle('can-build', state.frags>=40 && state.wood>=30);
+    document.getElementById('btn-door').classList.toggle('can-build', state.frags>=100 && state.wood>=80);
+}
+
+window.build = function(type) {
+    if(state.isDead||state.victory||!state.gameStarted) return;
+    if(type==='tv'&&state.frags>=10) { state.frags-=10; createTV(playerGroup.position.x,playerGroup.position.z); showMsg("📺 临时结界 (理智会流失)"); }
+    else if(type==='tent'&&state.frags>=25&&state.wood>=15) { state.frags-=25; state.wood-=15; createTent(playerGroup.position.x,playerGroup.position.z); showMsg("⛺ 庇护所已建立 (安全)"); }
+    else if(type==='net'&&state.frags>=40&&state.wood>=30) { state.frags-=40; state.wood-=30; createNet(playerGroup.position.x,playerGroup.position.z); showMsg("🕸️ 捕梦网开始生产！"); }
+    else if(type==='door'&&state.frags>=100&&state.wood>=80) { state.frags-=100; state.wood-=80; createDoor(playerGroup.position.x,playerGroup.position.z); triggerVictory(); }
+    else { showMsg("资源不足..."); } updateUI();
+}
+
+function triggerGameOver() { if(state.isDead||state.victory) return; state.isDead=true; audioEngine.stopAll(); document.getElementById('survival-record').innerText=`活过了 ${state.nightCount} 个夜晚`; document.getElementById('game-over').classList.add('active'); }
+function triggerVictory() { if(state.isDead||state.victory) return; state.victory=true; audioEngine.playVictoryChord(); document.getElementById('ui-layer').style.opacity=0; setTimeout(()=>document.getElementById('victory-screen').classList.add('active'),1000); }
+
+const joystick={active:false,dx:0,dy:0,startX:0,startY:0};
+window.addEventListener('touchstart',e=>{ if(state.isDead||state.victory||!state.gameStarted||e.touches[0].clientX>window.innerWidth*0.75) return; joystick.active=true; joystick.startX=e.touches[0].clientX; joystick.startY=e.touches[0].clientY; },{passive:false});
+window.addEventListener('touchmove',e=>{ if(!joystick.active||state.isDead||state.victory||!state.gameStarted) return; if(e.cancelable) e.preventDefault(); const t=Array.from(e.touches).find(t=>t.clientX<window.innerWidth*0.85); if(!t) return; let dx=t.clientX-joystick.startX; let dy=t.clientY-joystick.startY; const d=Math.hypot(dx,dy); if(d>40){dx=(dx/d)*40;dy=(dy/d)*40;} joystick.dx=dx/40; joystick.dy=dy/40; },{passive:false});
+window.addEventListener('touchend',()=> {joystick.active=false; joystick.dx=joystick.dy=0;});
+
+const clock=new THREE.Clock(); let currentCameraOffset=new THREE.Vector3(0,14,14);
+function animate() {
+    requestAnimationFrame(animate); const dt=clock.getDelta(); updateStatic();
+    if(state.gameStarted&&!state.isDead&&!state.victory) {
+        state.gameTime+=dt;
+        if(state.gameTime-state.lastFragGenTime>2.5 && state.nets.length>0) { state.frags+=state.nets.length; state.lastFragGenTime=state.gameTime; updateUI(); state.nets.forEach(n=>n.core.scale.set(1.5,1.5,1.5)); }
+        state.nets.forEach(n=>{ n.ring.rotation.z-=0.05; n.ring.rotation.x+=0.02; n.core.rotation.y+=0.1; if(n.core.scale.x>1) n.core.scale.subScalar(0.05); });
+    }
+    const cycle=(Math.sin(state.gameTime*0.08)+1)/2; const isNight=cycle<0.35;
+    if(state.gameStarted&&!state.victory) {
+        if(isNight&&!state.isCurrentlyNight) { state.nightCount++; spawnNightmare(); showMsg(`第 ${state.nightCount} 夜降临...`,4000); }
+        state.isCurrentlyNight=isNight;
+        if(audioEngine.ctx&&!state.isDead) audioEngine.nightGain.gain.setTargetAtTime(isNight?0.3+(0.35-cycle):0, audioEngine.ctx.currentTime, 1);
+    }
+    if(state.victory) { scene.background.lerp(new THREE.Color('#ffffff'),0.02); scene.fog.color.copy(scene.background); ambientLight.intensity=2.0; dirLight.intensity=2.0; }
+    else { scene.background.copy(nightColor).lerp(dayColor,cycle); scene.fog.color.copy(scene.background); ambientLight.intensity=0.2+cycle*0.6; dirLight.intensity=0.1+cycle*0.7; }
+    
+    const timeHint=document.getElementById('time-hint');
+    if(state.gameStarted&&!state.isDead&&!state.victory) {
+        if(joystick.active) { playerGroup.position.x+=joystick.dx*0.12; playerGroup.position.z+=joystick.dy*0.12; }
+        for(let i=floatingResources.length-1; i>=0; i--) {
+            const res=floatingResources[i]; res.rotation.y+=0.02; res.rotation.x+=0.01; res.position.y=res.userData.baseY+Math.sin(state.gameTime*3+res.userData.offset)*0.15;
+            if(Math.hypot(playerGroup.position.x-res.position.x, playerGroup.position.z-res.position.z)<1.5) {
+                if(res.userData.type==='frag') state.frags++; else state.wood++;
+                updateUI(); scene.remove(res); floatingResources.splice(i,1);
+                const angle=Math.random()*Math.PI*2; spawnResource(res.userData.type, playerGroup.position.x+Math.cos(angle)*30, playerGroup.position.z+Math.sin(angle)*30);
+            }
+        }
+        let inTent=false; let inTV=false;
+        state.safeZones.forEach(z => {
+            if(Math.hypot(playerGroup.position.x-z.x, playerGroup.position.z-z.z)<z.radius) { if(z.type==='tent') inTent=true; if(z.type==='tv') inTV=true; }
+            z.auraMesh.scale.setScalar(z.baseScale+Math.sin(state.gameTime*3)*1.5);
+        });
+        if(inTent) { state.sanity=Math.min(100,state.sanity+0.15); timeHint.innerText="⛺ 营地内(安全)"; timeHint.className='text-hint-day'; document.getElementById('ui-layer').style.boxShadow='inset 0 0 60px rgba(253,121,168,0.3)'; }
+        else if(inTV) { state.sanity-=0.02; timeHint.innerText="📺 结界内(理智流失)"; timeHint.className='text-hint-warn'; document.getElementById('ui-layer').style.boxShadow='inset 0 0 60px rgba(0,206,201,0.2)'; }
+        else { state.sanity-=isNight?0.08:0.01; if(isNight) { timeHint.innerText=`黑夜(第${state.nightCount}夜)`; timeHint.className='text-hint-night'; document.getElementById('ui-layer').style.boxShadow='inset 0 0 100px rgba(0,0,0,0.8)'; } else { timeHint.innerText="白天(探索)"; timeHint.className='text-hint-day'; document.getElementById('ui-layer').style.boxShadow='inset 0 0 60px rgba(0,0,0,0.2)'; } }
+        if(Math.random()<0.05) updateUI(); if(state.sanity<=0) triggerGameOver();
+
+        const speedMul=1+(1-cycle)*5; 
+        nightmares.forEach(nm => {
+            nm.meshes[0].rotation.x+=0.1; nm.meshes[0].rotation.y+=0.15; nm.meshes[1].rotation.z+=0.2; nm.meshes[1].rotation.x-=0.1;
+            nm.group.position.y=2+Math.sin(state.gameTime*15)*0.3; 
+            const dx=playerGroup.position.x-nm.group.position.x; const dz=playerGroup.position.z-nm.group.position.z; const dist=Math.hypot(dx,dz);
+            if(dist<1.0) triggerGameOver();
+            else if(dist>0.5) { 
+                const cs=nm.group.userData.baseSpeed*speedMul; let mx=(dx/dist)*cs; let mz=(dz/dist)*cs;
+                state.safeZones.forEach(z => {
+                    const nx=nm.group.position.x+mx; const nz=nm.group.position.z+mz; const zd=Math.hypot(nx-z.x,nz-z.z);
+                    if(zd<z.radius+1) { mx-=((z.x-nx)/zd)*cs*1.5; mz-=((z.z-nz)/zd)*cs*1.5; }
                 });
-            },
-            stopAll: function() {
-                if(this.masterGain) this.masterGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 2);
+                nm.group.position.x+=mx; nm.group.position.z+=mz;
             }
-        };
+        });
+    }
 
-        // --- 1. 梦境架构 ---
-        const scene = new THREE.Scene();
-        const dayColor = new THREE.Color('#c8bce5'); const nightColor = new THREE.Color('#1a1025');
-        scene.background = dayColor.clone(); scene.fog = new THREE.FogExp2(dayColor.clone(), 0.025); 
-
-        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.9; 
-        document.body.appendChild(renderer.domElement);
-
-        const ambientLight = new THREE.AmbientLight('#ffffff', 0.8); scene.add(ambientLight);
-        const dirLight = new THREE.DirectionalLight('#ffe0ec', 0.8);
-        dirLight.position.set(20, 50, -20); dirLight.castShadow = true;
-        dirLight.shadow.mapSize.width = 1024; dirLight.shadow.mapSize.height = 1024;
-        dirLight.shadow.camera.near = 0.5; dirLight.shadow.camera.far = 100;
-        const d = 40; dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d; dirLight.shadow.camera.top = d; dirLight.shadow.camera.bottom = -d;
-        scene.add(dirLight);
-
-        function createCheckerBoard() {
-            const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512; const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#b6a6d3'; ctx.fillRect(0, 0, 512, 512); ctx.fillStyle = '#c5b6e0'; ctx.fillRect(0, 0, 256, 256); ctx.fillRect(256, 256, 256, 256);
-            return new THREE.CanvasTexture(canvas);
-        }
-        const groundTex = createCheckerBoard(); groundTex.wrapS = THREE.RepeatWrapping; groundTex.wrapT = THREE.RepeatWrapping; groundTex.repeat.set(100, 100); 
-        const ground = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.4, metalness: 0.1 }));
-        ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-
-        // --- 2. 玩家烟雾 ---
-        const playerGroup = new THREE.Group(); playerGroup.position.y = 0; scene.add(playerGroup);
-        const playerLight = new THREE.PointLight('#ffb3d9', 1.5, 15); playerLight.position.set(0, 1, 0); playerGroup.add(playerLight);
-        const smokeParticles = [];
-        const smokeGeo = new THREE.SphereGeometry(0.4, 8, 8); const smokeMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending });
-        for(let i=0; i<15; i++) {
-            const particle = new THREE.Mesh(smokeGeo, smokeMat);
-            particle.userData = { yOffset: Math.random() * 2, speed: 0.02 + Math.random() * 0.02, angle: Math.random() * Math.PI * 2, radius: Math.random() * 0.3 };
-            playerGroup.add(particle); smokeParticles.push(particle);
-        }
-
-        const eyeTrees = [];
-        for(let i=0; i<35; i++) {
-            const treeGroup = new THREE.Group();
-            const trunkMat = new THREE.MeshStandardMaterial({ color: '#e0d5dd', roughness: 0.2, transparent: true, opacity: 0.35, depthWrite: false });
-            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 5, 8), trunkMat); trunk.position.y = 2.5; treeGroup.add(trunk);
-            const eyeGroup = new THREE.Group(); eyeGroup.position.y = 4.5; 
-            const sclera = new THREE.Mesh(new THREE.SphereGeometry(0.8, 16, 16), new THREE.MeshStandardMaterial({ color: '#fff9c4' })); eyeGroup.add(sclera);
-            const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16), new THREE.MeshStandardMaterial({ color: '#111', emissive: '#4d0000', emissiveIntensity: 2 }));
-            pupil.position.z = 0.6; pupil.scale.set(1, 1.5, 0.4); eyeGroup.add(pupil); treeGroup.add(eyeGroup);
-            const r = 10 + Math.random() * 70; const theta = Math.random() * Math.PI * 2;
-            treeGroup.position.set(r * Math.cos(theta), 0, r * Math.sin(theta)); scene.add(treeGroup); eyeTrees.push({ group: eyeGroup, pupil: pupil }); 
-        }
-
-        // --- 3. 资源生成逻辑 ---
-        const floatingResources = [];
-        function spawnResource(type, x, z) {
-            let mesh;
-            if (type === 'frag') {
-                mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.45), new THREE.MeshStandardMaterial({ color: '#ffeaa7', emissive: '#ffb142', emissiveIntensity: 0.8, transparent: true, opacity: 0.9, roughness: 0.1 }));
-                mesh.userData = { type: 'frag', baseY: 0.8, offset: Math.random()*Math.PI*2 };
-            } else {
-                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.25, 1.5, 5), new THREE.MeshStandardMaterial({ color: '#fd79a8', emissive: '#6c5ce7', emissiveIntensity: 0.3, roughness: 0.5 }));
-                mesh.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
-                mesh.userData = { type: 'wood', baseY: 0.8, offset: Math.random()*Math.PI*2 };
-            }
-            mesh.position.set(x, 0.8, z); mesh.castShadow = true; scene.add(mesh); floatingResources.push(mesh);
-        }
-        for(let i=0; i<150; i++) spawnResource('frag', (Math.random()-0.5)*140, (Math.random()-0.5)*140);
-        for(let i=0; i<80; i++) spawnResource('wood', (Math.random()-0.5)*140, (Math.random()-0.5)*140);
-
-        // --- 4. 庇护所工厂 (引入 Type 分化) ---
-        const staticTexCanvas = document.createElement('canvas'); staticTexCanvas.width = 128; staticTexCanvas.height = 128;
-        const staticCtx = staticTexCanvas.getContext('2d'); const staticTex = new THREE.CanvasTexture(staticTexCanvas);
-        function updateStatic() {
-            const imgData = staticCtx.createImageData(128, 128);
-            for (let i=0; i<imgData.data.length; i+=4) { const v=Math.random()*255; imgData.data[i]=imgData.data[i+1]=imgData.data[i+2]=v; imgData.data[i+3]=255; }
-            staticCtx.putImageData(imgData, 0, 0); staticTex.needsUpdate = true;
-        }
-        function createGlowTex(colorRGB) {
-            const canvas = document.createElement('canvas'); canvas.width=128; canvas.height=128; const ctx=canvas.getContext('2d');
-            const grd = ctx.createRadialGradient(64,64,0,64,64,64); grd.addColorStop(0, `rgba(${colorRGB}, 0.8)`); grd.addColorStop(0.4, `rgba(${colorRGB}, 0.3)`); grd.addColorStop(1, `rgba(${colorRGB}, 0)`);
-            ctx.fillStyle=grd; ctx.fillRect(0,0,128,128); return new THREE.CanvasTexture(canvas);
-        }
-        const tvGlowTex = createGlowTex('0, 206, 201'); 
-        const tentGlowTex = createGlowTex('255, 158, 205');
-
-        function createTV(x, z) {
-            const group = new THREE.Group();
-            const shell = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2, 1.5), new THREE.MeshStandardMaterial({ color: '#2d3436' })); shell.position.y=2.5; shell.castShadow=true; group.add(shell);
-            const screen = new THREE.Mesh(new THREE.PlaneGeometry(2, 1.5), new THREE.MeshBasicMaterial({ map: staticTex })); screen.position.set(0,2.5,0.76); group.add(screen);
-            const light = new THREE.PointLight('#00cec9', 5, 30); light.position.set(0,2.5,1); group.add(light);
-            const aura = new THREE.Sprite(new THREE.SpriteMaterial({ map: tvGlowTex, color: '#00cec9',
+    const dispTime=state.gameStarted?state.gameTime:clock.getElapsedTime();
+    smokeParticles.forEach(p => {
+        p.userData.yOffset+=p.userData.speed+(state.victory?0.1:0);
+        const a=p.userData.angle+dispTime*2; p.position.x=Math.cos(a)*p.userData.radius; p.position.z=Math.sin(a)*p.userData.radius; p.position.y=p.userData.yOffset;
+        const life=p.position.y/2.5; if(life>1&&!state.victory) p.userData.yOffset=0; else if(!state.victory) { p.scale.setScalar(1-life*0.8); p.material.opacity=0.5*(1-life); }
+    });
+    eyeTrees.forEach(eye => {
+        const dx=playerGroup.position.x-eye.group.parent.position.x; const dz=playerGroup.position.z-eye.group.parent.position.z;
+        let diff=Math.atan2(dx,dz)-eye.group.rotation.y; while(diff<-Math.PI) diff+=Math.PI*2; while(diff>Math.PI) diff-=Math.PI*2;
+        eye.group.rotation.y+=diff*0.08; const s=1+Math.sin(dispTime*2)*0.1; eye.pupil.scale.set(s,1.4*s,0.4);
+    });
+    if(!state.gameStarted||state.victory) floatingResources.forEach(res => { res.rotation.y+=0.02; res.rotation.x+=0.01; res.position.y=res.userData.baseY+Math.sin(dispTime*3+res.userData.offset)*0.15; });
+    if(state.victory) { currentCameraOffset.y+=0.05; currentCameraOffset.z-=0.02; }
+    camera.position.lerp(playerGroup.position.clone().add(currentCameraOffset),0.1); camera.lookAt(playerGroup.position);
+    renderer.render(scene,camera);
+}
+window.addEventListener('resize',()=>{camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth,window.innerHeight);});
+window.onload=function(){updateUI();animate();};
+</script>
+</body>
+</html>
